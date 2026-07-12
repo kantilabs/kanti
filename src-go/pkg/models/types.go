@@ -42,6 +42,28 @@ type ProxyStatus struct {
 	CertificatePath string `json:"certificatePath"`
 }
 
+// WebSocketConnection represents an intercepted WebSocket connection (real capture).
+type WebSocketConnection struct {
+	ID        string    `json:"id"`
+	URL       string    `json:"url"`
+	Host      string    `json:"host"`
+	Path      string    `json:"path"`
+	Protocol  string    `json:"protocol"` // "ws" (plaintext) or "wss" (TLS)
+	Timestamp time.Time `json:"timestamp"`
+	Status    string    `json:"status"` // "open" or "closed"
+}
+
+// WebSocketMessage represents a single WebSocket frame/message captured from the wire.
+type WebSocketMessage struct {
+	ID           string    `json:"id"`
+	ConnectionID string    `json:"connectionId"`
+	Direction    string    `json:"direction"` // "outgoing" (client->server) or "incoming" (server->client)
+	Opcode       string    `json:"opcode"`    // "text", "binary", "ping", "pong", "close"
+	Payload      string    `json:"payload"`
+	Length       int       `json:"length"`
+	Timestamp    time.Time `json:"timestamp"`
+}
+
 // IPCMessage represents a message sent over IPC
 type IPCMessage struct {
 	Type string      `json:"type"`

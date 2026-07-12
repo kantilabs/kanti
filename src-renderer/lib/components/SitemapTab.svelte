@@ -7,6 +7,7 @@
   import CodeMirror from "svelte-codemirror-editor";
   import { oneDark } from "@codemirror/theme-one-dark";
   import { scopeStore, type ScopeSettings } from '$lib/stores/scope';
+  import SitemapGraph from './SitemapGraph.svelte';
   import '$lib/styles/context-menu.css';
 
   // Import global types
@@ -66,8 +67,11 @@
   let showFilterOptions = false;
   let scopeOnly = false;
   let scopeSettings: ScopeSettings = { inScope: [], outOfScope: [] };
-  
-  
+
+  // View mode state
+  let viewMode: 'tree' | 'graph' = 'tree';
+
+
   // Clear requests
   async function clearRequests() {
     if (!isElectron || !window.electronAPI?.proxy) {
@@ -283,7 +287,12 @@
   function toggleScopeOnly() {
     scopeOnly = !scopeOnly;
   }
-  
+
+  // Toggle view mode
+  function toggleViewMode() {
+    viewMode = viewMode === 'tree' ? 'graph' : 'tree';
+  }
+
   // Get filtered requests based on scope settings
   $: filteredRequests = scopeOnly 
     ? requests.filter(request => isInScope(request.host))
@@ -707,6 +716,9 @@
 <div class="sitemap-header">
 <h3>Site Map</h3>
 <div class="sitemap-controls">
+  <button class="control-button view-mode-button" on:click={toggleViewMode}>
+    {viewMode === 'tree' ? '📊 Graph View' : '🌳 Tree View'}
+  </button>
   <button class="control-button scope-button" on:click={toggleScopeOnly}>
     {scopeOnly ? 'Show All' : 'In-Scope Only'}
   </button>
@@ -723,6 +735,17 @@
   <!-- Left Pane (Sitemap) -->
   <Pane size={30} minSize={20}>
     <div class="sitemap-container">
+      {#if viewMode === 'graph'}
+        <!-- Graph View -->
+        <SitemapGraph
+          {sitemapRoot}
+          {selectedNode}
+          {scopeOnly}
+          {isInScope}
+          onNodeSelect={selectNode}
+        />
+      {:else}
+      <!-- Tree View -->
       <div class="sitemap-tree">
         {#if sitemapRoot.children.size === 0}
           <div class="empty-sitemap">
@@ -811,9 +834,10 @@
           {/each}
         {/if}
       </div>
+      {/if}
     </div>
   </Pane>
-  
+
   <!-- Right Pane (Request Details) -->
   <Pane size={70}>
     <Splitpanes theme="modern-theme" horizontal>
@@ -1226,9 +1250,18 @@
   .scope-button {
     background-color: var(--accent-hover);
   }
-  
+
   .scope-button:hover {
     background-color: var(--accent-primary);
+  }
+
+  .view-mode-button {
+    background-color: var(--color-graph-subdomain);
+    color: #fff;
+  }
+
+  .view-mode-button:hover {
+    background-color: var(--color-graph-domain);
   }
   
   /* Request Info Panel */

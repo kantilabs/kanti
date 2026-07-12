@@ -4,13 +4,15 @@
   import { writable } from 'svelte/store';
   import RequestTable from './RequestTable.svelte';
   import RequestPanel from './RequestPanel.svelte';
+  import SendToChatDialog from './SendToChatDialog.svelte';
   import { tick } from 'svelte';
   import CodeMirror from "svelte-codemirror-editor";
   import { oneDark } from "@codemirror/theme-one-dark";
-  
+
   // Import scopeStore from the centralized store
   import { scopeStore, type ScopeSettings } from '$lib/stores/scope';
   import { addRepeaterRequest } from '$lib/stores/repeater';
+  import { chatStore } from '$lib/stores/chat';
   import { projectState } from '$lib/stores/project';
   import '$lib/styles/requests.css'
   import '$lib/styles/context-menu.css';
@@ -262,6 +264,10 @@
   let contextMenuY = 0;
   let contextMenuRequest: CapturedRequest | null = null;
 
+  // Send to Chat dialog state
+  let sendToChatDialogVisible = false;
+  let sendToChatRequest: CapturedRequest | null = null;
+
 
 
   async function showContextMenu(event: MouseEvent, request: CapturedRequest) {
@@ -400,7 +406,7 @@
   // Copy request URL to clipboard
   function copyRequestUrl(request: CapturedRequest) {
     const url = `${request.protocol}://${request.host}${request.path}`;
-    
+
     navigator.clipboard.writeText(url)
       .then(() => {
         console.log('URL copied to clipboard:', url);
@@ -408,6 +414,47 @@
       .catch((error) => {
         console.error('Failed to copy URL to clipboard:', error);
       });
+  }
+
+  // Show the "Send to Chat" dialog for a request
+  function showSendToChatDialog(request: CapturedRequest) {
+    sendToChatRequest = request;
+    sendToChatDialogVisible = true;
+    closeContextMenu();
+  }
+
+  // Route the tab switch through the shell's showInterface() mechanism.
+  // FREE's +page.svelte wires each `.tab` element to handleTabClick ->
+  // showInterface(<tab text>), so programmatically clicking the Chat tab is the
+  // supported way to switch tabs from a child component (no raw display hacks).
+  function switchToChatTab() {
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => {
+      if (tab.textContent?.trim() === 'Chat') {
+        (tab as HTMLElement).click();
+      }
+    });
+  }
+
+  // Handle the SendToChatDialog "send" event: push the request/response into the
+  // chat store, then switch to the Chat tab.
+  async function handleSendToChat(event: CustomEvent) {
+    const { request, mode, includeFullResponse, customQuestion } = event.detail;
+
+    try {
+      await chatStore.addRequestResponseToChat(
+        request,
+        mode,
+        includeFullResponse,
+        customQuestion
+      );
+
+      switchToChatTab();
+
+      console.log('Request sent to chat successfully');
+    } catch (error) {
+      console.error('Failed to send request to chat:', error);
+    }
   }
 
   // Load requests and proxy status
@@ -728,10 +775,23 @@
       <div class="context-menu-item" on:click={() => contextMenuRequest && sendToRepeater(contextMenuRequest)}>
         Send to Repeater
       </div>
+      <div class="context-menu-item" on:click={() => contextMenuRequest && showSendToChatDialog(contextMenuRequest)}>
+        Send to Chat
+      </div>
       <div class="context-menu-item" on:click={() => contextMenuRequest && copyRequestUrl(contextMenuRequest)}>
         Copy URL
       </div>
     </div>
+  {/if}
+
+  <!-- Send to Chat Dialog -->
+  {#if sendToChatRequest}
+    <SendToChatDialog
+      request={sendToChatRequest}
+      visible={sendToChatDialogVisible}
+      on:send={handleSendToChat}
+      on:close={() => sendToChatDialogVisible = false}
+    />
   {/if}
 
 

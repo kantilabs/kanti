@@ -324,23 +324,23 @@
   }
   
   .method.get {
-    color: var(--accent-primary);
+    color: var(--color-method-get);
   }
-  
+
   .method.post {
-    color: var(--accent-primary);
+    color: var(--color-method-post);
   }
-  
+
   .method.put {
-    color: var(--accent-primary);
+    color: var(--color-method-put);
   }
-  
+
   .method.delete {
-    color: var(--accent-primary);
+    color: var(--color-method-delete);
   }
-  
+
   .method.connect {
-    color: var(--accent-primary);
+    color: var(--color-method-connect);
   }
   
   .path {

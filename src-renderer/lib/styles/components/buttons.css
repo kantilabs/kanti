@@ -1,0 +1,164 @@
+/* Button Component Styles */
+
+/* Base Button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-button-bg);
+  color: var(--color-button-text);
+  border: 1px solid var(--color-button-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background-color: var(--color-button-hover);
+  border-color: var(--color-border-hover);
+}
+
+.btn:active {
+  background-color: var(--color-button-active);
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-input-focus);
+  outline-offset: 2px;
+}
+
+/* Button Sizes */
+.btn-sm {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xs);
+}
+
+.btn-lg {
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--font-size-md);
+}
+
+/* Button Variants */
+.btn-primary {
+  background-color: var(--color-accent-primary);
+  color: white;
+  border-color: var(--color-accent-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.btn-success {
+  background-color: var(--color-button-success);
+  color: white;
+  border-color: var(--color-button-success);
+}
+
+.btn-success:hover {
+  background-color: var(--color-button-success-hover);
+  border-color: var(--color-button-success-hover);
+}
+
+.btn-danger {
+  background-color: var(--color-button-danger);
+  color: white;
+  border-color: var(--color-button-danger);
+}
+
+.btn-danger:hover {
+  background-color: var(--color-button-danger-hover);
+  border-color: var(--color-button-danger-hover);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  background-color: var(--color-surface-hover);
+}
+
+/* Button States */
+.btn:disabled,
+.btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn.active {
+  background-color: var(--color-button-active);
+  border-color: var(--color-accent-primary);
+}
+
+.btn.active:hover {
+  background-color: var(--color-button-active-hover);
+}
+
+/* Icon Button */
+.btn-icon {
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.btn-icon.btn-sm {
+  padding: calc(var(--space-xs) / 2);
+}
+
+.btn-icon.btn-lg {
+  padding: var(--space-sm);
+}
+
+/* Control Button Variants (for request controls) */
+.control-button {
+  padding: 4px 14px;
+  background-color: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-sm);
+  color: var(--button-text);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-size: var(--font-size-sm);
+}
+
+.control-button:hover {
+  background-color: var(--button-hover);
+}
+
+.control-button.active {
+  background-color: var(--button-active);
+}
+
+.control-button.active:hover {
+  background-color: var(--button-active-hover);
+}
+
+.control-button.start {
+  background-color: var(--button-success);
+  color: white;
+}
+
+.control-button.start:hover {
+  background-color: var(--button-success-hover);
+}
+
+.control-button.stop {
+  background-color: var(--button-danger);
+  color: white;
+}
+
+.control-button.stop:hover {
+  background-color: var(--button-danger-hover);
+}

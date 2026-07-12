@@ -20,10 +20,12 @@ import (
 )
 
 const (
-	MaxBodySize       = 10 * 1024 * 1024 // 10MB
-	MaxCachedRequests = 1000
-	BatchSize         = 50
-	BatchInterval     = 100 * time.Millisecond
+	MaxBodySize          = 10 * 1024 * 1024 // 10MB
+	MaxCachedRequests    = 1000
+	BatchSize            = 50
+	BatchInterval        = 100 * time.Millisecond
+	MaxWSConnections     = 200
+	MaxWSMessagesPerConn = 500
 )
 
 // ProxyServer implements the HTTP/HTTPS proxy with SSL interception
@@ -51,6 +53,16 @@ type ProxyServer struct {
 	onRequest    func(models.RequestDetails)
 	onResponse   func(models.RequestDetails)
 	onBatchFlush func([]models.RequestDetails, []models.RequestDetails)
+
+	// WebSocket tracking (real capture — see websocket.go)
+	wsConnID              int64
+	wsMsgID               int64
+	wsConns               []models.WebSocketConnection         // capped at MaxWSConnections (oldest dropped)
+	wsMessages            map[string][]models.WebSocketMessage // connID -> messages (capped at MaxWSMessagesPerConn)
+	wsMu                  sync.RWMutex
+	onWebSocketConnection func(models.WebSocketConnection)
+	onWebSocketMessage    func(models.WebSocketMessage)
+	onWebSocketClose      func(models.WebSocketConnection)
 
 	// Server state
 	isRunning bool
@@ -85,6 +97,7 @@ func NewProxyServer(dataDir string, config *models.ProxyConfig) (*ProxyServer, e
 		cacheHead:  0,
 		cacheTail:  0,
 		cacheCount: 0,
+		wsMessages: make(map[string][]models.WebSocketMessage),
 	}
 
 	// Configure proxy
@@ -160,6 +173,20 @@ func (ps *ProxyServer) setupHandlers() {
 
 		// Capture request details
 		details := ps.captureRequest(req, reqID, startTime)
+
+		// WebSocket-over-TLS (wss://) boundary:
+		// wss requests arrive here already MITM'd by goproxy (via CONNECT +
+		// AlwaysMitm). goproxy performs a normal HTTP round-trip and then
+		// tunnels the raw (encrypted-then-decrypted) frame bytes opaquely; it
+		// does not expose a hijack hook at this layer, so we CANNOT tee-parse
+		// individual wss frames without risking regressions to normal HTTPS
+		// capture. We therefore register the connection + let the handshake be
+		// captured as a normal request/response below. Per-frame wss capture
+		// would require a goproxy-level hijack and is intentionally out of scope
+		// here. Plaintext ws:// IS fully frame-captured in ServeHTTP.
+		if isWebSocketUpgrade(req) && ps.shouldSave(details.Host) {
+			ps.registerWebSocketConnection(req, "wss")
+		}
 
 		// Check scope and emit request
 		if ps.shouldSave(details.Host) {
@@ -583,7 +610,9 @@ func (ps *ProxyServer) Start() error {
 
 	go func() {
 		log.Printf("Proxy server listening on %s\n", addr)
-		if err := http.Serve(listener, ps.proxy); err != nil {
+		// Serve through ps (ServeHTTP) so plaintext ws:// upgrades can be
+		// hijacked + frame-captured; everything else delegates to goproxy.
+		if err := http.Serve(listener, ps); err != nil {
 			if ps.isRunning {
 				log.Printf("Proxy server error: %v\n", err)
 			}
@@ -671,4 +700,263 @@ func (ps *ProxyServer) SetOnBatchFlush(callback func([]models.RequestDetails, []
 // GetCertificatePath returns the CA certificate path
 func (ps *ProxyServer) GetCertificatePath() string {
 	return ps.certMgr.GetCACertificatePath()
+}
+
+// =============================================================================
+// WebSocket capture (real RFC 6455 frame interception — see websocket.go)
+// =============================================================================
+
+// ServeHTTP makes *ProxyServer an http.Handler. Plaintext ws:// upgrade
+// requests are hijacked and frame-captured here; everything else (including
+// CONNECT tunnels for HTTPS/wss) is delegated to goproxy UNCHANGED.
+func (ps *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodConnect && isWebSocketUpgrade(r) {
+		ps.handleWebSocketUpgrade(w, r)
+		return
+	}
+	ps.proxy.ServeHTTP(w, r)
+}
+
+// isWebSocketUpgrade reports whether r is a WebSocket upgrade handshake:
+// a Connection header containing "upgrade" (case-insensitive; it may be a
+// comma-separated list like "keep-alive, Upgrade") and Upgrade: websocket.
+func isWebSocketUpgrade(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return false
+	}
+	for _, tok := range strings.Split(r.Header.Get("Connection"), ",") {
+		if strings.EqualFold(strings.TrimSpace(tok), "upgrade") {
+			return true
+		}
+	}
+	return false
+}
+
+// handleWebSocketUpgrade hijacks a plaintext ws:// upgrade, registers the
+// connection (if in scope), dials the upstream, and runs the tee-parsing relay
+// from websocket.go. It always relays (so the app keeps working) but only
+// records/emits frames for in-scope hosts.
+func (ps *ProxyServer) handleWebSocketUpgrade(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if host == "" && r.URL != nil {
+		host = r.URL.Host
+	}
+
+	// Bare hostname for scope checks (strip any :port).
+	hostname := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostname = h
+	}
+
+	// Upstream dial target — default to port 80 for plaintext ws.
+	dialHost := host
+	if _, _, err := net.SplitHostPort(dialHost); err != nil {
+		dialHost = net.JoinHostPort(dialHost, "80")
+	}
+
+	// Reconstruct the origin-form handshake request to send upstream.
+	handshake := buildWebSocketHandshake(r)
+
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "WebSocket capture unsupported", http.StatusInternalServerError)
+		return
+	}
+	clientConn, clientBuf, err := hj.Hijack()
+	if err != nil {
+		log.Printf("WebSocket hijack failed: %v\n", err)
+		return
+	}
+
+	// In-scope → capture; out-of-scope → relay transparently without recording.
+	var rec wsRecorder = nopRecorder{}
+	var connID string
+	if ps.shouldSave(hostname) {
+		connID = ps.registerWebSocketConnection(r, "ws")
+		rec = ps
+	}
+
+	if err := proxyWebSocket(rec, connID, dialHost, clientConn, clientBuf.Reader, handshake); err != nil {
+		log.Printf("WebSocket relay ended: %v\n", err)
+	}
+}
+
+// buildWebSocketHandshake reconstructs the raw origin-form GET upgrade request
+// bytes (request line + headers) from a parsed proxied request, so it can be
+// replayed to the upstream server verbatim.
+func buildWebSocketHandshake(r *http.Request) []byte {
+	var b bytes.Buffer
+
+	reqURI := "/"
+	if r.URL != nil {
+		if r.URL.Path != "" {
+			reqURI = r.URL.Path
+		}
+		if r.URL.RawQuery != "" {
+			reqURI += "?" + r.URL.RawQuery
+		}
+	}
+
+	fmt.Fprintf(&b, "GET %s HTTP/1.1\r\n", reqURI)
+	fmt.Fprintf(&b, "Host: %s\r\n", r.Host)
+	for k, vals := range r.Header {
+		// Host is written explicitly above; skip any duplicate.
+		if strings.EqualFold(k, "Host") {
+			continue
+		}
+		for _, v := range vals {
+			fmt.Fprintf(&b, "%s: %s\r\n", k, v)
+		}
+	}
+	b.WriteString("\r\n")
+	return b.Bytes()
+}
+
+// registerWebSocketConnection creates and stores a new WebSocketConnection,
+// emits it via the connection callback, and returns its ID. protocol is "ws"
+// or "wss".
+func (ps *ProxyServer) registerWebSocketConnection(r *http.Request, protocol string) string {
+	id := atomic.AddInt64(&ps.wsConnID, 1)
+	connID := fmt.Sprintf("ws-conn-%d", id)
+
+	host := r.Host
+	if host == "" && r.URL != nil {
+		host = r.URL.Host
+	}
+	path := "/"
+	if r.URL != nil && r.URL.Path != "" {
+		path = r.URL.Path
+	}
+
+	conn := models.WebSocketConnection{
+		ID:        connID,
+		URL:       protocol + "://" + host + path,
+		Host:      host,
+		Path:      path,
+		Protocol:  protocol,
+		Timestamp: time.Now(),
+		Status:    "open",
+	}
+
+	ps.wsMu.Lock()
+	ps.wsConns = append(ps.wsConns, conn)
+	if len(ps.wsConns) > MaxWSConnections {
+		// Drop the oldest connection (and its messages) to bound memory.
+		dropped := ps.wsConns[0]
+		ps.wsConns = ps.wsConns[1:]
+		delete(ps.wsMessages, dropped.ID)
+	}
+	ps.wsMu.Unlock()
+
+	if ps.onWebSocketConnection != nil {
+		ps.onWebSocketConnection(conn)
+	}
+	return connID
+}
+
+// recordWSMessage stores a captured frame as a WebSocketMessage and emits it.
+// The payload is capped at maxFramePayload for storage; Length is the full
+// on-wire payload length. Implements wsRecorder.
+func (ps *ProxyServer) recordWSMessage(connID, direction, opcode string, payload []byte) {
+	fullLen := len(payload)
+	stored := payload
+	if len(stored) > maxFramePayload {
+		stored = stored[:maxFramePayload]
+	}
+
+	id := atomic.AddInt64(&ps.wsMsgID, 1)
+	msg := models.WebSocketMessage{
+		ID:           fmt.Sprintf("ws-msg-%d", id),
+		ConnectionID: connID,
+		Direction:    direction,
+		Opcode:       opcode,
+		Payload:      string(stored),
+		Length:       fullLen,
+		Timestamp:    time.Now(),
+	}
+
+	ps.wsMu.Lock()
+	msgs := append(ps.wsMessages[connID], msg)
+	if len(msgs) > MaxWSMessagesPerConn {
+		msgs = msgs[len(msgs)-MaxWSMessagesPerConn:]
+	}
+	ps.wsMessages[connID] = msgs
+	ps.wsMu.Unlock()
+
+	if ps.onWebSocketMessage != nil {
+		ps.onWebSocketMessage(msg)
+	}
+}
+
+// closeWSConnection marks a connection closed and emits the close event.
+// Implements wsRecorder.
+func (ps *ProxyServer) closeWSConnection(connID string) {
+	if connID == "" {
+		return
+	}
+	var closed models.WebSocketConnection
+	found := false
+
+	ps.wsMu.Lock()
+	for i := range ps.wsConns {
+		if ps.wsConns[i].ID == connID {
+			ps.wsConns[i].Status = "closed"
+			closed = ps.wsConns[i]
+			found = true
+			break
+		}
+	}
+	ps.wsMu.Unlock()
+
+	if found && ps.onWebSocketClose != nil {
+		ps.onWebSocketClose(closed)
+	}
+}
+
+// GetWebSocketConnections returns all tracked WebSocket connections (newest first).
+func (ps *ProxyServer) GetWebSocketConnections() []models.WebSocketConnection {
+	ps.wsMu.RLock()
+	defer ps.wsMu.RUnlock()
+
+	result := make([]models.WebSocketConnection, 0, len(ps.wsConns))
+	for i := len(ps.wsConns) - 1; i >= 0; i-- {
+		result = append(result, ps.wsConns[i])
+	}
+	return result
+}
+
+// GetWebSocketMessages returns the captured messages for a connection (in order).
+func (ps *ProxyServer) GetWebSocketMessages(connID string) []models.WebSocketMessage {
+	ps.wsMu.RLock()
+	defer ps.wsMu.RUnlock()
+
+	msgs := ps.wsMessages[connID]
+	return append([]models.WebSocketMessage{}, msgs...)
+}
+
+// ClearWebSockets clears all WebSocket tracking data.
+func (ps *ProxyServer) ClearWebSockets() {
+	ps.wsMu.Lock()
+	defer ps.wsMu.Unlock()
+
+	ps.wsConns = nil
+	ps.wsMessages = make(map[string][]models.WebSocketMessage)
+}
+
+// SetOnWebSocketConnection sets the callback for new WebSocket connections.
+func (ps *ProxyServer) SetOnWebSocketConnection(cb func(models.WebSocketConnection)) {
+	ps.onWebSocketConnection = cb
+}
+
+// SetOnWebSocketMessage sets the callback for captured WebSocket messages.
+func (ps *ProxyServer) SetOnWebSocketMessage(cb func(models.WebSocketMessage)) {
+	ps.onWebSocketMessage = cb
+}
+
+// SetOnWebSocketClose sets the callback for WebSocket connection close events.
+func (ps *ProxyServer) SetOnWebSocketClose(cb func(models.WebSocketConnection)) {
+	ps.onWebSocketClose = cb
 }
