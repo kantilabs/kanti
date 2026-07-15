@@ -167,6 +167,21 @@ export class GoBackendManager {
     await this.request('POST', '/api/proxy/clear');
   }
 
+  // WebSocket capture methods (talk to the Go backend's /api/websocket/*).
+  async getWebSocketConnections(): Promise<any[]> {
+    const response = await this.request('GET', '/api/websocket/connections');
+    return response.data ?? [];
+  }
+
+  async getWebSocketMessages(connId: string): Promise<any[]> {
+    const response = await this.request('GET', `/api/websocket/messages?conn=${encodeURIComponent(connId)}`);
+    return response.data ?? [];
+  }
+
+  async clearWebSockets(): Promise<void> {
+    await this.request('POST', '/api/websocket/clear');
+  }
+
   // Helper methods
   private getBinaryPath(): string {
     const platform = process.platform;

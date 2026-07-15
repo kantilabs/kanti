@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import ProxySettings from './settings/ProxySettings.svelte';
-  import GeneralSettings from './settings/GeneralSettings.svelte';
+  import AISettings from './settings/AISettings.svelte';
   import ScopeSettings from './settings/ScopeSettings.svelte';
   import ProjectSettings from './settings/ProjectSettings.svelte';
   import ThemeSettings from './settings/ThemeSettings.svelte';
-  
+  import HotkeySettings from './settings/HotkeySettings.svelte';
+
   // Props that can be passed to the component
   export let standalone = false; // Whether the component is running in standalone mode (new window)
   
@@ -39,8 +40,10 @@
 <div class="settings-sidebar">
     <div class="sidebar-item" class:active={selectedSection === 'Project'} on:click={() => selectSection('Project')}>Project</div>
     <div class="sidebar-item" class:active={selectedSection === 'Proxy'} on:click={() => selectSection('Proxy')}>Proxy</div>
+    <div class="sidebar-item" class:active={selectedSection === 'AI'} on:click={() => selectSection('AI')}>AI</div>
     <div class="sidebar-item" class:active={selectedSection === 'Scope'} on:click={() => selectSection('Scope')}>Scope</div>
     <div class="sidebar-item" class:active={selectedSection === 'Theme'} on:click={() => selectSection('Theme')}>Theme</div>
+    <div class="sidebar-item" class:active={selectedSection === 'Hotkeys'} on:click={() => selectSection('Hotkeys')}>Keyboard Shortcuts</div>
   </div>
   
   <!-- Settings Content -->
@@ -55,6 +58,11 @@
         <h2>Proxy Settings</h2>
         <svelte:component this={ProxySettings} />
       </div>
+    {:else if selectedSection === 'AI'}
+      <div class="settings-section">
+        <h2>AI Settings</h2>
+        <svelte:component this={AISettings} />
+      </div>
     {:else if selectedSection === 'Scope'}
       <div class="settings-section">
         <h2>Scope Settings</h2>
@@ -64,6 +72,11 @@
       <div class="settings-section">
         <h2>Theme & Visual Options</h2>
         <svelte:component this={ThemeSettings} />
+      </div>
+    {:else if selectedSection === 'Hotkeys'}
+      <div class="settings-section">
+        <h2>Keyboard Shortcuts</h2>
+        <svelte:component this={HotkeySettings} />
       </div>
     {/if}
   </div>

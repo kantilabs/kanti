@@ -5,6 +5,9 @@ import { stat } from 'node:fs/promises';
 import { GoBackendManager } from './go-backend';
 import * as projectModule from './project';
 import * as ffufModule from './ffuf';
+import { registerLlmIpc, registerNetIpc } from './llm/relay';
+import { registerBackendIpc } from './executor/ipc';
+import { registerAgentIpc } from './agent/ipc';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 
@@ -60,6 +63,32 @@ let tabWindows: Record<string, BrowserWindow> = {};
 // Reference to the startup dialog window
 let startupDialogWindow: BrowserWindow | null = null;
 
+// Harness integration. The pentest harness launches kanti as
+// `kanti --harness [--project <file>]` (see the harness'
+// internal/server/connections.go). `--harness` starts kanti straight into the
+// main window, skipping the project picker; `--project <file>` loads that
+// `.kanti` project first so kanti opens aligned to the harness run.
+function parseArgValue(argv: string[], flag: string): string | undefined {
+  const i = argv.indexOf(flag);
+  if (i >= 0 && i + 1 < argv.length) return argv[i + 1];
+  const eq = argv.find((a) => a.startsWith(`${flag}=`));
+  return eq ? eq.slice(flag.length + 1) : undefined;
+}
+const harnessMode = process.argv.includes('--harness');
+const harnessProjectPath = parseArgValue(process.argv, '--project');
+
+// Load a `.kanti` project from disk (no dialog) before a window opens, so the
+// renderer picks it up via `project:getCurrent`. Best-effort: a bad path logs
+// and kanti still opens with no project.
+async function loadHarnessProject(filePath: string) {
+  try {
+    const res = await projectModule.loadProject(filePath);
+    if (!res.success) console.error(`Harness: failed to load project ${filePath}:`, res.error);
+  } catch (error) {
+    console.error(`Harness: error loading project ${filePath}:`, error);
+  }
+}
+
 // Only one instance of the electron main process should be running due to how chromium works.
 // If another instance of the main process is already running `app.requestSingleInstanceLock()`
 // will return false, `app.quit()` will be called, and the other instances will receive a
@@ -71,7 +100,11 @@ if(!app.requestSingleInstanceLock()) {
 
 // This event will be called when a second instance of the app tries to run.
 // https://www.electronjs.org/docs/latest/api/app#event-second-instance
-app.on('second-instance', (event, args, workingDirectory, additionalData) => {
+app.on('second-instance', async (event, args, workingDirectory, additionalData) => {
+	// A second `kanti --harness --project <file>` invocation opens a window in the
+	// running instance, loading the requested project if one was passed.
+	const projectPath = parseArgValue(args, '--project');
+	if (projectPath) await loadHarnessProject(projectPath);
 	createWindow();
 });
 
@@ -309,10 +342,60 @@ app.on('ready', async () => {
   
   // Register proxy IPC handlers that communicate with Go backend
   registerProxyIpcHandlers();
-  
+
+  // Register LLM relay IPC handlers (provider calls run in main via net.fetch
+  // so chat works in packaged builds without a server route or CORS).
+  registerLlmIpc(ipcMain);
+
+  // Register the general-purpose fetch relay (net:fetch) used by automation
+  // workflows and agent tools for arbitrary CORS-free HTTP requests.
+  registerNetIpc(ipcMain);
+
+  // Register the exec-backend IPC (local/docker). The chat Agent runs its tools
+  // through this. Proxy context (URL + CA path) is pulled from the running proxy
+  // so a selected backend routes agent egress through the scope-proxy MITM.
+  registerBackendIpc(ipcMain, {
+    getProxyContext: async () => {
+      try {
+        const status = await goBackend.getStatus();
+        return {
+          proxyUrl: status.isRunning ? `http://127.0.0.1:${status.port}` : undefined,
+          proxyCAFile: status.certificatePath || undefined,
+        };
+      } catch {
+        return {};
+      }
+    },
+  });
+
+  // Register the HITL agent IPC. The agent turn loop (streaming providers + tool
+  // dispatch) runs in MAIN; the renderer drives it via electronAPI.agent and
+  // receives the live event stream on 'agent:event'. The agent's shell/fs tools run
+  // on the SAME BackendManager the BackendSelector drives; kanti_proxy_* hit the
+  // go-backend API; kanti_project_* use the in-process ProjectManager.
+  registerAgentIpc(ipcMain, {
+    getWindow: () => {
+      const wins = BrowserWindow.getAllWindows();
+      return wins.find((w) => !Object.values(tabWindows).includes(w)) || wins[0] || null;
+    },
+    getProxyBaseUrl: () => 'http://localhost:9090',
+    getProjectManager: () => ({
+      getCurrentProject: projectModule.getCurrentProject,
+      saveProject: projectModule.saveProject,
+    }),
+  });
+
+  // Expose the harness launch context to the renderer (a hook for
+  // harness-specific UI; the renderer can ignore it when kanti runs standalone).
+  ipcMain.handle('harness:context', () => ({ active: harnessMode, projectPath: harnessProjectPath ?? null }));
+
+  // When launched from the harness with `--project <file>`, load it before the
+  // window opens so the renderer sees it via `project:getCurrent`.
+  if (harnessProjectPath) await loadHarnessProject(harnessProjectPath);
+
   // Start directly with main window
   createWindow();
-  
+
   // Register IPC handlers for tab management
   registerTabManagementHandlers();
 });
@@ -600,6 +683,37 @@ function registerProxyIpcHandlers() {
       return { success: true };
     } catch (error) {
       console.error('Error clearing requests:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Get all captured WebSocket connections
+  ipcMain.handle('proxy:getWebSocketConnections', async () => {
+    try {
+      return await goBackend.getWebSocketConnections();
+    } catch (error) {
+      console.error('Error getting WebSocket connections:', error);
+      return [];
+    }
+  });
+
+  // Get captured messages for a specific WebSocket connection
+  ipcMain.handle('proxy:getWebSocketMessages', async (event, connId: string) => {
+    try {
+      return await goBackend.getWebSocketMessages(connId);
+    } catch (error) {
+      console.error('Error getting WebSocket messages:', error);
+      return [];
+    }
+  });
+
+  // Clear all captured WebSocket data
+  ipcMain.handle('proxy:clearWebSockets', async () => {
+    try {
+      await goBackend.clearWebSockets();
+      return { success: true };
+    } catch (error) {
+      console.error('Error clearing WebSocket data:', error);
       return { success: false, error: (error as Error).message };
     }
   });

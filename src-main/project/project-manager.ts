@@ -26,6 +26,14 @@ export interface ProjectData {
   settings: ProjectSettings;
   lastSaved: string | null;
   lastOpened?: string;
+
+  // Automation (workflow builder) slice. Optional for back-compat with
+  // projects saved before automation existed. Persisted automatically by
+  // save/load since they round-trip the whole project object (like chats).
+  automation?: {
+    workflows: any[];
+    selectedWorkflowId: string | null;
+  };
 }
 
 export interface SaveResult {

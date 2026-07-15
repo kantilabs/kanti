@@ -2,6 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { v4 as uuidv4 } from 'uuid';
 import { projectState } from './project';
+import { formatRequestResponse, createAnalysisPrompt, createContextMessage } from '../utils/requestFormatter';
 
 // Message interface
 export interface Message {
@@ -278,6 +279,45 @@ const createChatStore = () => {
     }
   };
 
+  // Initialize project data loading
+  const initializeProjectData = (project: Project) => {
+    loadChatsFromProject(project);
+  };
+
+  // Add request/response to chat with optional analysis. In 'analyze' mode the
+  // user message uses createAnalysisPrompt(); the ChatTab auto-submit block
+  // detects that prompt and fires the AI request. In 'context' mode we attach
+  // the request/response plus the user's own question.
+  const addRequestResponseToChat = async (
+    request: CapturedRequest,
+    mode: 'context' | 'analyze',
+    includeFullResponse: boolean,
+    customQuestion?: string
+  ): Promise<void> => {
+    // Format the request/response
+    const { formatted } = formatRequestResponse(request, includeFullResponse);
+
+    // Create the message based on mode
+    let messageContent: string;
+    if (mode === 'analyze') {
+      messageContent = createAnalysisPrompt(formatted);
+    } else {
+      messageContent = createContextMessage(formatted, customQuestion || '');
+    }
+
+    // Add the user message
+    const userMessage: Message = {
+      role: 'user',
+      content: messageContent,
+      timestamp: new Date()
+    };
+
+    addMessage(userMessage);
+
+    // In analyze mode the ChatTab component owns the API call (it has the
+    // provider/apiKey settings) and auto-submits when it sees the prompt.
+  };
+
   // Initialize
   if (browser) {
     // Subscribe to project changes to load chats when a project is opened
@@ -301,7 +341,9 @@ const createChatStore = () => {
     clearActiveConversation,
     renameConversation,
     saveChatsToProject,
-    loadChatsFromProject
+    loadChatsFromProject,
+    initializeProjectData,
+    addRequestResponseToChat
   };
 };
 

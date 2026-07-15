@@ -75,11 +75,17 @@
     }
     showCustomThemeEditor = false;
     editingTheme = null;
+
+    // Force re-render by pulling the latest list from the store so the new
+    // theme appears immediately.
+    customThemes = $visualSettings.customThemes;
   }
-  
+
   // Delete custom theme
   function deleteCustomThemeHandler(themeId: string) {
     deleteCustomTheme(themeId);
+    // Force re-render so the deleted theme disappears immediately.
+    customThemes = $visualSettings.customThemes;
   }
   
   // Cancel theme editing

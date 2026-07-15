@@ -99,6 +99,10 @@ export declare global {
         autoStart: boolean;
       };
     };
+    automation?: {
+      workflows: import('./stores/automation').Workflow[];
+      selectedWorkflowId?: string;
+    };
   }
 
   // Interface for chat conversations

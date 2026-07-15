@@ -1,0 +1,208 @@
+/* Panel and Layout Component Styles */
+
+/* Base Panel */
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-surface-primary);
+  border-radius: var(--radius-md);
+}
+
+/* Panel Header */
+.panel-header {
+  padding: var(--space-sm) var(--space-md);
+  background-color: transparent;
+  border-bottom: 1px solid var(--color-border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Panel Content */
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+  position: relative;
+  max-width: 100%;
+}
+
+/* Panel Variants */
+.request-panel {
+  border-right: 1px solid var(--color-border-primary);
+}
+
+.response-panel {
+  /* Additional response panel styles if needed */
+}
+
+/* Panel Container */
+.panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: transparent;
+}
+
+/* Split Panel View */
+.split-view {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+}
+
+.bottom-container {
+  flex: 1;
+  background-color: var(--color-surface-primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+/* Line Numbers and Content */
+.line-numbers-wrapper {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.line-numbers {
+  background-color: var(--color-surface-secondary);
+  padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-xs);
+  text-align: right;
+  color: var(--color-text-muted);
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+  user-select: none;
+  min-width: 30px;
+  border-right: 1px solid var(--color-border-primary);
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+}
+
+.line-number {
+  height: 1.4em;
+}
+
+.content-block {
+  font-family: monospace;
+  white-space: pre-wrap;
+  margin: 0;
+  padding: var(--space-sm);
+  background-color: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+  border: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  display: block;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+/* No Selection State */
+.no-selection {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* Detail Items */
+.detail-item.error {
+  color: var(--color-accent-primary);
+}
+
+/* Request Controls */
+.request-controls {
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border-primary);
+}
+
+.control-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: var(--font-weight-bold);
+  max-width: 300px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--color-status-offline);
+}
+
+.status-indicator.running .status-dot {
+  background-color: var(--color-status-online);
+  box-shadow: 0 0 8px var(--color-status-online);
+}
+
+.control-buttons {
+  display: flex;
+  gap: var(--space-sm);
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-group {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: center;
+}
+
+/* Main Panel */
+.requests-main-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background-color: transparent;
+  border-radius: var(--radius-sm);
+  height: 100%;
+  border: 1px solid var(--color-border-primary);
+}
+
+.requests-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: transparent;
+}

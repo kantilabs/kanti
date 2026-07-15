@@ -11,6 +11,10 @@
   import FuzzTab from '$lib/components/FuzzTab.svelte';
   import ChatTab from '$lib/components/ChatTab.svelte';
   import SitemapTab from '$lib/components/SitemapTab.svelte';
+  import AutomationTab from '$lib/components/AutomationTab.svelte';
+  import AuthTab from '$lib/components/AuthTab.svelte';
+  import WebSocketTab from '$lib/components/WebSocketTab.svelte';
+  import { hotkeyManager } from '$lib/utils/hotkey-manager';
   import '$lib/styles/context-menu.css';
   
   // Check if we should display the startup dialog
@@ -29,7 +33,7 @@
   let activeSidebarItem = 'Requests';
   
   // Tabs array for reordering
-  let tabs = ['Requests', 'Repeater', 'Fuzzer', 'Chat', 'Decode', 'Sitemap'];
+  let tabs = ['Requests', 'Repeater', 'Fuzzer', 'Automation', 'Chat', 'Decode', 'Sitemap', 'Auth', 'WebSocket'];
   let draggedTab: string | null = null;
   let draggedOverTab: string | null = null;
   
@@ -161,10 +165,13 @@
     const chatInterface = document.getElementById('chat-interface') as HTMLElement;
     const fuzzerInterface = document.getElementById('fuzzer-interface') as HTMLElement;
     const sitemapInterface = document.getElementById('sitemap-interface') as HTMLElement;
+    const automationInterface = document.getElementById('automation-interface') as HTMLElement;
+    const authInterface = document.getElementById('auth-interface') as HTMLElement;
+    const websocketInterface = document.getElementById('websocket-interface') as HTMLElement;
     const tabsBar = document.querySelector('.tabs-wrapper') as HTMLElement;
-    
+
     if (!requestsInterface || !repeaterInterface || !decodeEncodeInterface || !settingsInterface || !sitemapInterface || !fuzzerInterface || !tabsBar) return;
-    
+
     // Hide all interface panels
     requestsInterface.style.display = 'none';
     repeaterInterface.style.display = 'none';
@@ -173,7 +180,10 @@
     chatInterface.style.display = 'none';
     fuzzerInterface.style.display = 'none';
     sitemapInterface.style.display = 'none';
-    
+    if (automationInterface) automationInterface.style.display = 'none';
+    if (authInterface) authInterface.style.display = 'none';
+    if (websocketInterface) websocketInterface.style.display = 'none';
+
     // Show/hide tabs based on the selected interface and visual settings
     if (interfaceName === 'Settings' || hideTopTabs) {
       if (tabsBar) tabsBar.style.display = 'none';
@@ -190,10 +200,16 @@
       settingsInterface.style.display = 'block';
     } else if (interfaceName === 'Fuzzer') {
       fuzzerInterface.style.display = 'block';
+    } else if (interfaceName === 'Automation') {
+      if (automationInterface) automationInterface.style.display = 'block';
     } else if (interfaceName === 'Chat') {
       chatInterface.style.display = 'block';
     } else if (interfaceName === 'Sitemap') {
       sitemapInterface.style.display = 'block';
+    } else if (interfaceName === 'Auth') {
+      if (authInterface) authInterface.style.display = 'block';
+    } else if (interfaceName === 'WebSocket') {
+      if (websocketInterface) websocketInterface.style.display = 'block';
     } else if (interfaceName === 'Requests') {
       requestsInterface.style.display = 'block';
     } else {
@@ -221,7 +237,7 @@
   // Function to handle the right-click event on sidebar items
   function handleContextMenu(event: MouseEvent, tabName: string) {
     // Only handle right-clicks for Repeater and Requests tabs
-    if (tabName !== 'Settings' && tabName !== 'Repeater' && tabName !== 'Requests' && tabName !== 'Fuzzer' && tabName !== 'Chat' && tabName !== 'Decode' && tabName !== 'Sitemap') return;
+    if (tabName !== 'Settings' && tabName !== 'Repeater' && tabName !== 'Requests' && tabName !== 'Fuzzer' && tabName !== 'Automation' && tabName !== 'Chat' && tabName !== 'Decode' && tabName !== 'Sitemap' && tabName !== 'Auth' && tabName !== 'WebSocket') return;
     
     // Prevent the default context menu
     event.preventDefault();
@@ -336,6 +352,47 @@
     }
   }
 
+  // Function to setup hotkey listeners
+  function setupHotkeyListeners() {
+    // Tab navigation hotkeys (Ctrl+1 through Ctrl+9)
+    for (let i = 1; i <= 9; i++) {
+      hotkeyManager.registerHotkey(`tab${i}`, () => {
+        if (tabs.length >= i) {
+          const tabName = tabs[i - 1];
+          showInterface(tabName);
+
+          // Update active tab in the UI
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          const targetTab = Array.from(document.querySelectorAll('.tab')).find(tab =>
+            tab.textContent?.trim() === tabName
+          ) as HTMLElement;
+          if (targetTab) {
+            targetTab.classList.add('active');
+          }
+
+          // Update active sidebar item
+          activeSidebarItem = tabName;
+        }
+      });
+    }
+
+    // Action hotkeys
+    hotkeyManager.registerHotkey('toggleSidebar', () => {
+      toggleSidebar();
+    });
+
+    hotkeyManager.registerHotkey('toggleTabs', () => {
+      // Toggle tabs visibility through the store to ensure reactivity
+      visualSettings.update(settings => ({
+        ...settings,
+        hideTopTabs: !settings.hideTopTabs
+      }));
+    });
+
+    // Note: Other action hotkeys like newRequest, sendRequest, search would need
+    // to be implemented in their respective components
+  }
+
   // Initialize the UI after component is mounted
   onMount(() => {
     // Load saved tabs order
@@ -381,6 +438,7 @@
     // Set up listeners
     setupTabMessageListener();
     setupProjectStateChangeListener();
+    setupHotkeyListeners();
     
     // Add event listeners for tabs
     document.querySelectorAll('.tab').forEach(tab => {
@@ -433,6 +491,13 @@
         tabsContainer.removeEventListener('scroll', checkTabsOverflow);
       }
       window.removeEventListener('resize', checkTabsOverflow);
+
+      // Clean up hotkey listeners
+      for (let i = 1; i <= 9; i++) {
+        hotkeyManager.unregisterHotkey(`tab${i}`);
+      }
+      hotkeyManager.unregisterHotkey('toggleSidebar');
+      hotkeyManager.unregisterHotkey('toggleTabs');
     };
   });
   
@@ -465,6 +530,9 @@
         <div class="sidebar-item" class:active={activeSidebarItem === 'Fuzzer'}>
           <span class="label">Fuzzer</span>
         </div>
+        <div class="sidebar-item" class:active={activeSidebarItem === 'Automation'}>
+          <span class="label">Automation</span>
+        </div>
         <div class="sidebar-item" class:active={activeSidebarItem === 'Chat'}>
           <span class="label">Chat</span>
         </div>
@@ -473,6 +541,12 @@
         </div>
         <div class="sidebar-item" class:active={activeSidebarItem === 'Sitemap'}>
           <span class="label">Sitemap</span>
+        </div>
+        <div class="sidebar-item" class:active={activeSidebarItem === 'Auth'}>
+          <span class="label">Auth</span>
+        </div>
+        <div class="sidebar-item" class:active={activeSidebarItem === 'WebSocket'}>
+          <span class="label">WebSocket</span>
         </div>
       </div>
     </div>
@@ -531,6 +605,20 @@
              on:contextmenu={(e) => handleContextMenu(e, 'Fuzzer')}>
           <span class="icon-only" title="Fuzzer"><i class="fi fi-rr-paper-plane"></i></span>
         </div>
+        <div class="icon-item" class:active={activeSidebarItem === 'Automation'}
+             on:click={() => {
+               const tabs = document.querySelectorAll('.tab');
+               tabs.forEach(tab => {
+                 if (tab.textContent === 'Automation') {
+                   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                   tab.classList.add('active');
+                   showInterface('Automation');
+                 }
+               });
+             }}
+             on:contextmenu={(e) => handleContextMenu(e, 'Automation')}>
+          <span class="icon-only" title="Automation"><i class="fi fi-rr-diagram-project"></i></span>
+        </div>
         <div class="icon-item" class:active={activeSidebarItem === 'Chat'}
              on:click={() => {
                const tabs = document.querySelectorAll('.tab');
@@ -572,6 +660,34 @@
              }}
              on:contextmenu={(e) => handleContextMenu(e, 'Sitemap')}>
           <span class="icon-only" title="Sitemap"><i class="fi fi-sr-track"></i></span>
+        </div>
+        <div class="icon-item" class:active={activeSidebarItem === 'Auth'}
+             on:click={() => {
+               const tabs = document.querySelectorAll('.tab');
+               tabs.forEach(tab => {
+                 if (tab.textContent === 'Auth') {
+                   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                   tab.classList.add('active');
+                   showInterface('Auth');
+                 }
+               });
+             }}
+             on:contextmenu={(e) => handleContextMenu(e, 'Auth')}>
+          <span class="icon-only" title="Auth"><i class="fi fi-rr-shield-check"></i></span>
+        </div>
+        <div class="icon-item" class:active={activeSidebarItem === 'WebSocket'}
+             on:click={() => {
+               const tabs = document.querySelectorAll('.tab');
+               tabs.forEach(tab => {
+                 if (tab.textContent === 'WebSocket') {
+                   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                   tab.classList.add('active');
+                   showInterface('WebSocket');
+                 }
+               });
+             }}
+             on:contextmenu={(e) => handleContextMenu(e, 'WebSocket')}>
+          <span class="icon-only" title="WebSocket"><i class="fi fi-rr-plug-connection"></i></span>
         </div>
       </div>
     {/if}
@@ -631,6 +747,10 @@
         <FuzzTab />
       </div>
 
+      <div id="automation-interface" class:no-tabs={hideTopTabs}>
+        <AutomationTab />
+      </div>
+
       <div id="chat-interface" class:no-tabs={hideTopTabs}>
         <ChatTab />
       </div>
@@ -638,7 +758,15 @@
       <div id="sitemap-interface" class:no-tabs={hideTopTabs}>
         <SitemapTab />
       </div>
-      
+
+      <div id="auth-interface" class:no-tabs={hideTopTabs}>
+        <AuthTab />
+      </div>
+
+      <div id="websocket-interface" class:no-tabs={hideTopTabs}>
+        <WebSocketTab />
+      </div>
+
       <!-- Settings Interface -->
       <div id="settings-interface" class:no-tabs={hideTopTabs}>
         <SettingsTab />
@@ -960,6 +1088,34 @@
   }
 
   #sitemap-interface.no-tabs {
+    height: calc(100vh - 122px);
+  }
+
+  #auth-interface {
+    height: calc(100vh - 192px);
+    display: none;
+  }
+
+  #auth-interface.no-tabs {
+    height: calc(100vh - 122px);
+  }
+
+  #websocket-interface {
+    height: calc(100vh - 192px);
+    display: none;
+  }
+
+  #websocket-interface.no-tabs {
+    height: calc(100vh - 122px);
+  }
+
+  #automation-interface {
+    height: calc(100vh - 192px);
+    display: none;
+    overflow: hidden;
+  }
+
+  #automation-interface.no-tabs {
     height: calc(100vh - 122px);
   }
 

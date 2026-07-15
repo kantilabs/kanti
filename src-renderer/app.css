@@ -1,167 +1,76 @@
 @import "tailwindcss";
+@import './lib/styles/themes/base.css';
+@import './lib/styles/globals.css';
+@import './lib/styles/components/buttons.css';
+@import './lib/styles/components/forms.css';
+@import './lib/styles/components/tables.css';
+@import './lib/styles/components/panels.css';
+@import './lib/styles/components/modals.css';
 
-/* Theme Variables */
-:root {
-  /* Light Theme Colors */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-tertiary: #e8e8e8;
-  --bg-hover: #e0e0e0;
-  --bg-active: #d5d5d5;
-  
-  --text-primary: #1a1a1a;
-  --text-secondary: #4a4a4a;
-  --text-tertiary: #6a6a6a;
-  --text-muted: #9a9a9a;
-  
-  --border-primary: #d0d0d0;
-  --border-secondary: #e0e0e0;
-  --border-hover: #b0b0b0;
-  
-  --accent-primary: #ff5252;
-  --accent-hover: #ff3838;
-  --accent-light: #ff8080;
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  
-  --scrollbar-track: #f0f0f0;
-  --scrollbar-thumb: #c0c0c0;
-  --scrollbar-thumb-hover: #a0a0a0;
-  
-  --input-bg: #ffffff;
-  --input-border: #d0d0d0;
-  --input-focus: #ff5252;
-  
-  --titlebar-bg: #f0f0f0;
-  --titlebar-text: #1a1a1a;
+/* --- FREE-only rules (preserved from previous app.css) --- */
+
+/* Splitpanes: Modern Theme */
+:global(.splitpanes.modern-theme .splitpanes__pane) {
+  background-color: transparent;
 }
 
-:root.dark {
-  /* Dark Theme Colors */
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252525;
-  --bg-tertiary: #2a2a2a;
-  --bg-hover: #333333;
-  --bg-active: #3a3a3a;
-  
-  --text-primary: #ffffff;
-  --text-secondary: #e0e0e0;
-  --text-tertiary: #b0b0b0;
-  --text-muted: #6a6a6a;
-  
-  --border-primary: #444444;
-  --border-secondary: #333333;
-  --border-hover: #555555;
-  
-  --accent-primary: #ff5252;
-  --accent-hover: #ff3838;
-  --accent-light: #ff8080;
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
-  
-  --scrollbar-track: #1e1e1e;
-  --scrollbar-thumb: #444444;
-  --scrollbar-thumb-hover: #555555;
-  
-  --input-bg: #2a2a2a;
-  --input-border: #444444;
-  --input-focus: #ff5252;
-  
-  --titlebar-bg: #212121;
-  --titlebar-text: #ffffff;
+:global(.splitpanes.modern-theme .splitpanes__splitter) {
+  background-color: var(--splitter-bg);
+  position: relative;
 }
 
-/* Apply theme colors globally */
-body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+:global(.splitpanes.modern-theme .splitpanes__splitter:before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  transition: opacity 0.4s;
+  background-color: var(--splitter-hover);
+  opacity: 0;
+  z-index: 1;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+:global(.splitpanes.modern-theme .splitpanes__splitter:hover:before) {
+  opacity: 1;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+:global(.splitpanes.modern-theme .splitpanes__splitter.splitpanes__splitter__active) {
+  z-index: 2; /* Fix an issue of overlap fighting with a near hovered splitter */
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+:global(.modern-theme.splitpanes--vertical > .splitpanes__splitter:before) {
+  left: -3px;
+  right: -3px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+:global(.modern-theme.splitpanes--horizontal > .splitpanes__splitter:before) {
+  top: -3px;
+  bottom: -3px;
+  width: 100%;
+  cursor: row-resize;
+}
+
+/* Splitpanes: No Splitter Theme */
+:global(.splitpanes.no-splitter .splitpanes__pane) {
+  background-color: transparent;
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+:global(.splitpanes.no-splitter .splitpanes__splitter) {
+  background-color: var(--splitter-bg);
+  position: relative;
 }
 
-  /* Modern Theme */
-  :global(.splitpanes.modern-theme .splitpanes__pane) {
-    background-color: transparent;
-    
-  }
- 
-  :global(.splitpanes.modern-theme .splitpanes__splitter) {
-    background-color: #ccc;
-    position: relative;
-  }
- 
-  :global(.splitpanes.modern-theme .splitpanes__splitter:before) {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    transition: opacity 0.4s;
-    background-color: #ff5252;
-    opacity: 0;
-    z-index: 1;
-  }
- 
-  :global(.splitpanes.modern-theme .splitpanes__splitter:hover:before) {
-    opacity: 1;
-  }
- 
-  :global(.splitpanes.modern-theme .splitpanes__splitter.splitpanes__splitter__active) {
-    z-index: 2; /* Fix an issue of overlap fighting with a near hovered splitter */
-  }
- 
-  :global(.modern-theme.splitpanes--vertical > .splitpanes__splitter:before) {
-    left: -3px;
-    right: -3px;
-    height: 100%;
-    cursor: col-resize;
-  }
- 
-  :global(.modern-theme.splitpanes--horizontal > .splitpanes__splitter:before) {
-    top: -3px;
-    bottom: -3px;
-    width: 100%;
-    cursor: row-resize;
-  }
- 
-  /* No Splitter Theme */
-  :global(.splitpanes.no-splitter .splitpanes__pane) {
-    background-color: transparent;
-    border-radius: 4px;
-  }
- 
-  :global(.splitpanes.no-splitter .splitpanes__splitter) {
-    background-color: #ccc;
-    position: relative;
-  }
- 
-  :global(.no-splitter.splitpanes--horizontal > .splitpanes__splitter:before) {
-    width: 0.125rem;
-    pointer-events: none;
-    cursor: none;
-  }
- 
-  :global(.no-splitter.splitpanes--vertical > .splitpanes__splitter:before) {
-    height: 0.125rem;
-    pointer-events: none;
-    cursor: none;
-  }
+:global(.no-splitter.splitpanes--horizontal > .splitpanes__splitter:before) {
+  width: 0.125rem;
+  pointer-events: none;
+  cursor: none;
+}
+
+:global(.no-splitter.splitpanes--vertical > .splitpanes__splitter:before) {
+  height: 0.125rem;
+  pointer-events: none;
+  cursor: none;
+}

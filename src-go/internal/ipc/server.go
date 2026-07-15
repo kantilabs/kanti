@@ -34,7 +34,31 @@ func NewServer(proxyServer *proxy.ProxyServer, port int) *Server {
 	// Set up proxy event handlers
 	proxyServer.SetOnBatchFlush(s.handleBatchFlush)
 
+	// Wire real WebSocket capture callbacks to SSE broadcasts.
+	proxyServer.SetOnWebSocketConnection(func(conn models.WebSocketConnection) {
+		s.broadcast(models.IPCEvent{Type: "websocket-connection", Data: conn})
+	})
+	proxyServer.SetOnWebSocketMessage(func(msg models.WebSocketMessage) {
+		s.broadcast(models.IPCEvent{Type: "websocket-message", Data: msg})
+	})
+	proxyServer.SetOnWebSocketClose(func(conn models.WebSocketConnection) {
+		s.broadcast(models.IPCEvent{Type: "websocket-close", Data: conn})
+	})
+
 	return s
+}
+
+// broadcast sends an IPC event to all connected SSE clients (non-blocking).
+func (s *Server) broadcast(event models.IPCEvent) {
+	s.eventClientsMu.RLock()
+	defer s.eventClientsMu.RUnlock()
+	for client := range s.eventClients {
+		select {
+		case client <- event:
+		default:
+			// Client buffer full, skip.
+		}
+	}
 }
 
 // Start starts the IPC HTTP server
@@ -48,6 +72,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/proxy/config", s.handleConfig)
 	mux.HandleFunc("/api/proxy/requests", s.handleRequests)
 	mux.HandleFunc("/api/proxy/clear", s.handleClear)
+	mux.HandleFunc("/api/websocket/connections", s.handleWSConnections)
+	mux.HandleFunc("/api/websocket/messages", s.handleWSMessages)
+	mux.HandleFunc("/api/websocket/clear", s.handleWSClear)
 	mux.HandleFunc("/api/events", s.handleEvents)
 
 	// Enable CORS for Electron
@@ -181,6 +208,39 @@ func (s *Server) handleClear(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.proxyServer.ClearRequests()
+	sendSuccess(w, map[string]bool{"success": true})
+}
+
+// handleWSConnections returns all captured WebSocket connections.
+func (s *Server) handleWSConnections(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	sendSuccess(w, s.proxyServer.GetWebSocketConnections())
+}
+
+// handleWSMessages returns captured messages for a connection: /api/websocket/messages?conn=<id>
+func (s *Server) handleWSMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	connID := r.URL.Query().Get("conn")
+	if connID == "" {
+		sendError(w, "conn query parameter required", http.StatusBadRequest)
+		return
+	}
+	sendSuccess(w, s.proxyServer.GetWebSocketMessages(connID))
+}
+
+// handleWSClear clears all captured WebSocket data.
+func (s *Server) handleWSClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.proxyServer.ClearWebSockets()
 	sendSuccess(w, map[string]bool{"success": true})
 }
 

@@ -255,9 +255,15 @@
       if (!$selectedRepeaterRequest) return;
       
       try {
+        // Ensure URL has a protocol, default to HTTPS if missing
+        let urlToParse = urlInput;
+        if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
+          urlToParse = 'https://' + urlInput;
+        }
+
         // Parse the URL to extract protocol, host, and path
-        const parsedUrl = new URL(urlInput);
-        
+        const parsedUrl = new URL(urlToParse);
+
         // Update the selected request
         const updatedRequest = {
           ...$selectedRepeaterRequest,
@@ -265,10 +271,13 @@
           host: parsedUrl.host,
           path: parsedUrl.pathname + parsedUrl.search
         };
-        
+
         // Update the request in the store
         updateRepeaterRequest(updatedRequest.repeaterId, updatedRequest);
-        
+
+        // Update the URL input to show the full URL with protocol
+        urlInput = `${updatedRequest.protocol}://${updatedRequest.host}${updatedRequest.path}`;
+
       } catch (error) {
         console.error('Error parsing URL:', error);
         // Invalid URL, revert to the original
@@ -302,21 +311,8 @@
     .join('\n')}
   
   ${response.responseBody}`;
-  
-      // Add request data if available
-      if (response.requestData) {
-        output += `\n\n--- Request Data ---
-  Method: ${response.requestData.method}
-  URL: ${response.requestData.url}
-  Headers:
-  ${Object.entries(response.requestData.headers || {})
-    .map(([key, value]) => `  ${key}: ${value}`)
-    .join('\n')}
-  
-  Body:
-  ${response.requestData.body || '(empty)'}`;
-      }
-  
+
+
       return output;
     }
     
@@ -348,7 +344,13 @@
       // If we have a response with request data, use that
       if (currentResponse?.requestData) {
         try {
-          const url = new URL(currentResponse.requestData.url);
+          // Ensure URL has a protocol, default to HTTPS if missing
+          let urlToParse = currentResponse.requestData.url;
+          if (!urlToParse.startsWith('http://') && !urlToParse.startsWith('https://')) {
+            urlToParse = 'https://' + urlToParse;
+          }
+
+          const url = new URL(urlToParse);
           requestContent = formatRequestString({
             ...$selectedRepeaterRequest,
             method: currentResponse.requestData.method,

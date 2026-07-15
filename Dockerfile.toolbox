@@ -1,0 +1,33 @@
+# kanti agent toolbox image — the default container the DOCKER exec backend runs
+# the chat Agent's tools inside (the container is the security boundary).
+#
+# Build it yourself (the app does NOT build it for you):
+#   docker build -t kanti-toolbox:latest -f Dockerfile.toolbox .
+#
+# When kanti's backend is set to "docker" and this image is present (or pullable),
+# the agent runs each tool via `docker exec` in a per-run container labelled
+# kanti.run=<runId>. If the image is missing and unpullable, the backend degrades
+# to "local" (see src-main/executor/resolve.ts) — same behavior as the harness.
+#
+# This is intentionally minimal: curl/wget/ca-certificates for HTTP recon (they
+# honor http_proxy/https_proxy so the scope-proxy MITM captures every request),
+# python3 for scripting, and dnsutils/netcat for basic network probing. Extend it
+# with your own recon tooling (httpx, nuclei, katana, ffuf, ...) as needed.
+FROM debian:stable-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      wget \
+      python3 \
+      python3-pip \
+      dnsutils \
+      netcat-openbsd \
+      git \
+      jq \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# The backend provisions the container as `... sleep infinity` and drives it via
+# `docker exec`, so no ENTRYPOINT/CMD is required here.
